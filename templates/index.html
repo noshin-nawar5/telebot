@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChunkVault — Distributed Cloud Storage</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a24;
+      --surface2: #1e2330;
+      --border: #2a3045;
+      --accent: #4f8ef7;
+      --accent2: #7c3aed;
+      --green: #22c55e;
+      --red: #ef4444;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --mono: 'JetBrains Mono', monospace;
+
+      /* account colors */
+      --acct-a: #4f8ef7;
+      --acct-b: #a855f7;
+      --acct-c: #f59e0b;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ---- Layout ---- */
+    .topbar {
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 10;
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo-icon {
+      width: 24px; height: 24px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .stat-pill {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .stat-pill span { color: var(--text); font-weight: 500; }
+
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+    }
+
+    .page-title {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+    }
+
+    .page-sub {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+
+    /* ---- Upload zone ---- */
+    .upload-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(79, 142, 247, 0.04);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+
+    .upload-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 1rem;
+      font-size: 1.1rem;
+    }
+
+    .upload-zone h3 { font-size: 0.95rem; font-weight: 500; margin-bottom: 0.3rem; }
+    .upload-zone p { font-size: 0.8rem; color: var(--muted); }
+
+    .upload-btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      margin-top: 1.2rem;
+      padding: 0.55rem 1.3rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      position: relative;
+      z-index: 1;
+    }
+
+    .upload-btn:hover { opacity: 0.88; }
+    .upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ---- Progress bar ---- */
+    .progress-wrap {
+      display: none;
+      margin-top: 1rem;
+    }
+
+    .progress-wrap.visible { display: block; }
+
+    .progress-bar-bg {
+      background: var(--surface2);
+      border-radius: 999px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-label {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem; right: 1.5rem;
+      padding: 0.75rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      z-index: 100;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.25s ease;
+      max-width: 320px;
+    }
+
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: #14532d; color: #86efac; border: 1px solid #166534; }
+    .toast.error { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+
+    /* ---- Account badges ---- */
+    .account-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .account-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      border: 1px solid;
+    }
+
+    .account-badge.a { background: rgba(79,142,247,0.1); border-color: rgba(79,142,247,0.3); color: var(--acct-a); }
+    .account-badge.b { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.3); color: var(--acct-b); }
+    .account-badge.c { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: var(--acct-c); }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    /* ---- File list ---- */
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+
+    .file-list { display: flex; flex-direction: column; gap: 1px; }
+
+    .file-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+
+    .file-row:hover { border-color: #3a4560; }
+
+    .file-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.9rem 1.1rem;
+      cursor: pointer;
+    }
+
+    .file-icon {
+      width: 32px; height: 32px;
+      background: var(--surface2);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .file-info { flex: 1; min-width: 0; }
+
+    .file-name {
+      font-size: 0.88rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      margin-top: 0.1rem;
+    }
+
+    .file-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid;
+      transition: opacity 0.15s;
+    }
+
+    .btn-sm:hover { opacity: 0.8; }
+
+    .btn-dl {
+      background: rgba(79,142,247,0.1);
+      border-color: rgba(79,142,247,0.3);
+      color: var(--accent);
+    }
+
+    .btn-del {
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.25);
+      color: var(--red);
+    }
+
+    .expand-arrow {
+      font-size: 0.7rem;
+      color: var(--muted);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .file-row.open .expand-arrow { transform: rotate(180deg); }
+
+    /* ---- Chunk visualization ---- */
+    .chunk-panel {
+      display: none;
+      padding: 0 1.1rem 1.1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .file-row.open .chunk-panel { display: block; }
+
+    .chunk-panel-title {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin: 0.75rem 0 0.6rem;
+      font-family: var(--mono);
+    }
+
+    /* Visual chunk strip */
+    .chunk-strip {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      margin-bottom: 0.9rem;
+    }
+
+    .chunk-block {
+      height: 20px;
+      border-radius: 3px;
+      min-width: 18px;
+      flex: 1;
+      max-width: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 500;
+      cursor: default;
+      transition: opacity 0.15s;
+      position: relative;
+    }
+
+    .chunk-block:hover { opacity: 0.75; }
+    .chunk-block.a { background: rgba(79,142,247,0.25); color: var(--acct-a); }
+    .chunk-block.b { background: rgba(168,85,247,0.25); color: var(--acct-b); }
+    .chunk-block.c { background: rgba(245,158,11,0.2); color: var(--acct-c); }
+
+    /* Chunk table */
+    .chunk-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+
+    .chunk-table th {
+      text-align: left;
+      padding: 0.4rem 0.6rem;
+      color: var(--muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+    }
+
+    .chunk-table td {
+      padding: 0.35rem 0.6rem;
+      border-bottom: 1px solid rgba(42,48,69,0.5);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .chunk-table tr:last-child td { border-bottom: none; }
+
+    .acct-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-weight: 500;
+    }
+
+    .acct-label.a { color: var(--acct-a); }
+    .acct-label.b { color: var(--acct-b); }
+    .acct-label.c { color: var(--acct-c); }
+
+    /* ---- Empty state ---- */
+    .empty {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--muted);
+    }
+
+    .empty-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+    .empty p { font-size: 0.85rem; }
+
+    /* ---- Auth ---- */
+    .btn-login {
+      padding: 0.4rem 1rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-login:hover { opacity: 0.85; }
+
+    .btn-logout {
+      padding: 0.4rem 1rem;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-logout:hover { color: var(--text); border-color: #3a4560; }
+
+    .login-wall {
+      text-align: center;
+      padding: 4rem 1rem;
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      margin-bottom: 2rem;
+    }
+
+    .login-wall h3 { font-size: 1rem; font-weight: 500; margin-bottom: 0.4rem; }
+    .login-wall p { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 600px) {
+      .topbar { padding: 0 1rem; }
+      .main { padding: 1.5rem 1rem; }
+      .topbar-right { gap: 0.75rem; }
+      .stat-pill:not(:last-child) { display: none; }
+      .file-actions { flex-direction: column; gap: 0.3rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    ChunkVault
+  </div>
+  <div class="topbar-right">
+    <div class="stat-pill">files <span id="stat-files">—</span></div>
+    <div class="stat-pill">chunks <span id="stat-chunks">—</span></div>
+    <div class="stat-pill">stored <span id="stat-size">—</span></div>
+    <div id="auth-area"></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-title">Distributed Cloud Storage</div>
+  <div class="page-sub">Files are split into 512 KB chunks and distributed across multiple Google Drive accounts.</div>
+
+  <!-- Account legend -->
+  <div class="account-row">
+    <div class="account-badge a"><div class="dot"></div> Drive Account A</div>
+    <div class="account-badge b"><div class="dot"></div> Drive Account B</div>
+    <div class="account-badge c"><div class="dot"></div> Drive Account C</div>
+  </div>
+
+  <!-- Upload zone (shown when logged in) -->
+  <div id="uploadArea">
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput">
+      <div class="upload-icon">📂</div>
+      <h3>Drop a file here</h3>
+      <p>or click to browse</p>
+      <button class="upload-btn" id="uploadBtn" onclick="triggerUpload(event)">Upload file</button>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">Uploading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login wall (shown when logged out) -->
+  <div id="loginWall" class="login-wall" style="display:none">
+    <div class="upload-icon" style="margin:0 auto 1rem">🔐</div>
+    <h3>Connect your Google Drive</h3>
+    <p>Sign in to start uploading and distributing files across Drive accounts.</p>
+    <a href="/login" class="btn-login">Sign in with Google</a>
+  </div>
+
+  <!-- File list -->
+  <div class="section-label">Stored files</div>
+  <div class="file-list" id="fileList">
+    <div class="empty">
+      <div class="empty-icon">🗂</div>
+      <p>No files yet. Upload something to get started.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const ACCOUNT_LETTERS = ['a', 'b', 'c'];
+  const ACCOUNT_LABELS  = ['Drive Account A', 'Drive Account B', 'Drive Account C'];
+
+  // ---- Helpers ----
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function formatDate(ts) {
+    return new Date(ts * 1000).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    });
+  }
+
+  function fileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const map = { pdf: '📄', jpg: '🖼', jpeg: '🖼', png: '🖼', gif: '🖼',
+                  mp4: '🎬', zip: '🗜', py: '🐍', js: '📜', txt: '📝', docx: '📝' };
+    return map[ext] || '📁';
+  }
+
+  function showToast(msg, type = 'success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type} show`;
+    setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ---- Stats ----
+  async function loadStats() {
+    try {
+      const r = await fetch('/stats');
+      const d = await r.json();
+      document.getElementById('stat-files').textContent = d.total_files;
+      document.getElementById('stat-chunks').textContent = d.total_chunks;
+      document.getElementById('stat-size').textContent = formatSize(d.total_size);
+    } catch {}
+  }
+
+  // ---- File list ----
+  async function loadFiles() {
+    const list = document.getElementById('fileList');
+    try {
+      const r = await fetch('/files');
+      const d = await r.json();
+      const files = d.files || [];
+
+      if (files.length === 0) {
+        list.innerHTML = `<div class="empty"><div class="empty-icon">🗂</div><p>No files yet. Upload something to get started.</p></div>`;
+        return;
+      }
+
+      list.innerHTML = files.map(f => buildFileRow(f)).join('');
+
+      // Attach toggle listeners
+      list.querySelectorAll('.file-header').forEach(h => {
+        h.addEventListener('click', () => {
+          h.closest('.file-row').classList.toggle('open');
+        });
+      });
+    } catch (e) {
+      list.innerHTML = `<div class="empty"><p>Failed to load files.</p></div>`;
+    }
+  }
+
+  function buildFileRow(f) {
+    const chunkStrip = f.chunks.map((c, i) => {
+      const letter = ACCOUNT_LETTERS[c.account_index] || 'a';
+      return `<div class="chunk-block ${letter}" title="Chunk ${c.chunk_index} → ${ACCOUNT_LABELS[c.account_index]}">${c.chunk_index}</div>`;
+    }).join('');
+
+    const tableRows = f.chunks.map(c => {
+      const letter = ACCOUNT_LETTERS[c.account_index] || 'a';
+      const chunkSize = c.chunk_index === f.total_chunks - 1
+        ? formatSize(f.file_size % (512 * 1024) || 512 * 1024)
+        : '512 KB';
+      return `<tr>
+        <td>${c.chunk_index}</td>
+        <td><span class="acct-label ${letter}"><span class="dot" style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>${ACCOUNT_LABELS[c.account_index]}</span></td>
+        <td>${chunkSize}</td>
+        <td style="color:#334155;word-break:break-all">${c.drive_file_id}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+    <div class="file-row" data-hash="${f.file_hash}">
+      <div class="file-header">
+        <div class="file-icon">${fileIcon(f.filename)}</div>
+        <div class="file-info">
+          <div class="file-name">${f.filename}</div>
+          <div class="file-meta">${formatSize(f.file_size)} · ${f.total_chunks} chunks · ${formatDate(f.uploaded_at)}</div>
+        </div>
+        <div class="file-actions" onclick="event.stopPropagation()">
+          <button class="btn-sm btn-dl" onclick="downloadFile('${f.file_hash}', '${f.filename}')">↓ Download</button>
+          <button class="btn-sm btn-del" onclick="deleteFile('${f.file_hash}')">Delete</button>
+        </div>
+        <div class="expand-arrow">▼</div>
+      </div>
+      <div class="chunk-panel">
+        <div class="chunk-panel-title">chunk distribution — ${f.total_chunks} pieces across ${new Set(f.chunks.map(c => c.account_index)).size} accounts</div>
+        <div class="chunk-strip">${chunkStrip}</div>
+        <table class="chunk-table">
+          <thead><tr><th>#</th><th>Account</th><th>Size</th><th>Drive ID</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ---- Upload ----
+  function triggerUpload(e) {
+    e.stopPropagation();
+    document.getElementById('fileInput').click();
+  }
+
+  document.getElementById('fileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await doUpload(file);
+    e.target.value = '';
+  });
+
+  const zone = document.getElementById('uploadZone');
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) await doUpload(file);
+  });
+
+  async function doUpload(file) {
+    const btn = document.getElementById('uploadBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const fill = document.getElementById('progressFill');
+    const label = document.getElementById('progressLabel');
+
+    btn.disabled = true;
+    btn.textContent = 'Uploading…';
+    progressWrap.classList.add('visible');
+    fill.style.width = '10%';
+    label.textContent = `Uploading ${file.name}…`;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Animate progress (simulated — real upload is sync)
+    let pct = 10;
+    const ticker = setInterval(() => {
+      pct = Math.min(pct + Math.random() * 12, 85);
+      fill.style.width = pct + '%';
+    }, 400);
+
+    try {
+      const r = await fetch('/upload', { method: 'POST', body: formData });
+      const d = await r.json();
+      clearInterval(ticker);
+
+      if (!r.ok) {
+        fill.style.width = '100%';
+        fill.style.background = 'var(--red)';
+        label.textContent = d.error || 'Upload failed';
+        showToast(d.error || 'Upload failed', 'error');
+      } else {
+        fill.style.width = '100%';
+        label.textContent = `✓ ${d.filename} — ${d.total_chunks} chunks distributed`;
+        showToast(`${d.filename} uploaded in ${d.total_chunks} chunks`, 'success');
+        await loadFiles();
+        await loadStats();
+      }
+    } catch (err) {
+      clearInterval(ticker);
+      fill.style.background = 'var(--red)';
+      label.textContent = 'Connection error';
+      showToast('Upload failed — check the server', 'error');
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = 'Upload file';
+        progressWrap.classList.remove('visible');
+        fill.style.width = '0%';
+        fill.style.background = '';
+      }, 2500);
+    }
+  }
+
+  // ---- Download ----
+  async function downloadFile(hash, name) {
+    showToast(`Reassembling ${name}…`, 'success');
+    window.location.href = `/download/${hash}`;
+  }
+
+  // ---- Delete ----
+  async function deleteFile(hash) {
+    if (!confirm('Delete this file and all its chunks from Google Drive?')) return;
+    try {
+      const r = await fetch(`/delete/${hash}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (r.ok || r.status === 207) {
+        showToast('File deleted', 'success');
+        await loadFiles();
+        await loadStats();
+      } else {
+        showToast(d.error || 'Delete failed', 'error');
+      }
+    } catch {
+      showToast('Delete failed', 'error');
+    }
+  }
+
+  // ---- Auth ----
+  async function checkAuth() {
+    const r = await fetch('/auth-status');
+    const d = await r.json();
+    const authArea = document.getElementById('auth-area');
+    const uploadArea = document.getElementById('uploadArea');
+    const loginWall = document.getElementById('loginWall');
+
+    if (d.logged_in) {
+      authArea.innerHTML = `<a href="/logout" class="btn-logout">Sign out</a>`;
+      uploadArea.style.display = 'block';
+      loginWall.style.display = 'none';
+    } else {
+      authArea.innerHTML = `<a href="/login" class="btn-login">Sign in with Google</a>`;
+      uploadArea.style.display = 'none';
+      loginWall.style.display = 'block';
+    }
+  }
+
+  // ---- Init ----
+  checkAuth();
+  loadFiles();
+  loadStats();
+</script>
+</body>
+</html>
